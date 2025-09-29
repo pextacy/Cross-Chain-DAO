@@ -1,0 +1,62 @@
+{
+  "name": "cross-chain-dao-treasury-automation",
+  "version": "1.0.0",
+  "description": "The first DAO treasury autopilot with cross-chain intelligence - Reactive Network Hackathon Entry",
+  "main": "index.js",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "test:integration": "hardhat test test/integration/EndToEnd.test.js",
+    "test:all": "npm run test && npm run test:integration",
+
+    "deploy:reactive": "hardhat run scripts/deploy.js --network reactive",
+    "deploy:sepolia": "hardhat run scripts/deploy.js --network sepolia",
+    "deploy:arbitrum": "hardhat run scripts/deploy.js --network arbitrumSepolia",
+    "deploy:all": "npm run deploy:reactive && npm run deploy:sepolia && npm run deploy:arbitrum",
+
+    "configure": "hardhat run scripts/configure.js --network reactive",
+    "configure:sepolia": "CONFIGURE_TREASURY=sepolia hardhat run scripts/configure.js --network sepolia",
+    "configure:arbitrum": "CONFIGURE_TREASURY=arbitrum hardhat run scripts/configure.js --network arbitrumSepolia",
+
+    "fund:sepolia": "TREASURY_ADDRESS=$SEPOLIA_TREASURY USDC_ADDRESS=$SEPOLIA_USDC hardhat run scripts/fund-treasury.js --network sepolia",
+    "fund:arbitrum": "TREASURY_ADDRESS=$ARBITRUM_TREASURY USDC_ADDRESS=$ARBITRUM_USDC hardhat run scripts/fund-treasury.js --network arbitrumSepolia",
+
+    "verify:reactive": "hardhat run scripts/verify-contracts.js --network reactive",
+    "verify:sepolia": "hardhat run scripts/verify-contracts.js --network sepolia",
+    "verify:arbitrum": "hardhat run scripts/verify-contracts.js --network arbitrumSepolia",
+    "verify:all": "npm run verify:reactive && npm run verify:sepolia && npm run verify:arbitrum",
+
+    "monitor": "node scripts/monitor.js",
+    "demo": "hardhat run scripts/demo.js",
+    "demo:local": "hardhat run scripts/demo.js --network hardhat",
+
+    "gas-analysis": "hardhat run scripts/gas-analysis.js",
+    "health-check": "node scripts/health-check.js",
+    "submission": "node scripts/submission-generator.js",
+
+    "hackathon:deploy": "npm run deploy:all && npm run configure && npm run configure:sepolia && npm run configure:arbitrum",
+    "hackathon:verify": "npm run verify:all",
+    "hackathon:test": "npm run test:all",
+    "hackathon:full": "npm run hackathon:test && npm run hackathon:deploy && npm run hackathon:verify",
+    "hackathon:submit": "npm run health-check && npm run gas-analysis && npm run submission"
+  },
+  "keywords": [
+    "reactive-network",
+    "dao-treasury",
+    "cross-chain",
+    "defi",
+    "automation",
+    "smart-contracts",
+    "hackathon"
+  ],
+  "author": "Reactive Hackathon Participant",
+  "license": "MIT",
+  "type": "commonjs",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "*",
+    "hardhat": "*",
+    "@openzeppelin/contracts": "*",
+    "dotenv": "*",
+    "chalk": "^4.1.2"
+  }
+}
