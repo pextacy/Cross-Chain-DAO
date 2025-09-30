@@ -24,7 +24,7 @@ interface IReactive {
         uint256 indexed chainid,
         address indexed _contract,
         uint64 indexed gas_limit,
-        bytes calldata payload
+        bytes payload
     );
 
     function subscribe(

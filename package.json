@@ -8,32 +8,30 @@
     "test": "hardhat test",
     "test:integration": "hardhat test test/integration/EndToEnd.test.js",
     "test:all": "npm run test && npm run test:integration",
-
+    "deploy:local": "hardhat run scripts/deploy-local.js --network hardhat",
+    "node:local": "hardhat node",
+    "test:local": "hardhat run scripts/deploy-local.js --network localhost",
     "deploy:reactive": "hardhat run scripts/deploy.js --network reactive",
     "deploy:sepolia": "hardhat run scripts/deploy.js --network sepolia",
     "deploy:arbitrum": "hardhat run scripts/deploy.js --network arbitrumSepolia",
     "deploy:all": "npm run deploy:reactive && npm run deploy:sepolia && npm run deploy:arbitrum",
-
     "configure": "hardhat run scripts/configure.js --network reactive",
     "configure:sepolia": "CONFIGURE_TREASURY=sepolia hardhat run scripts/configure.js --network sepolia",
     "configure:arbitrum": "CONFIGURE_TREASURY=arbitrum hardhat run scripts/configure.js --network arbitrumSepolia",
-
+    "fund:reactive": "hardhat run scripts/fund-reactive.js --network sepolia",
+    "balances": "hardhat run scripts/check-balances.js",
     "fund:sepolia": "TREASURY_ADDRESS=$SEPOLIA_TREASURY USDC_ADDRESS=$SEPOLIA_USDC hardhat run scripts/fund-treasury.js --network sepolia",
     "fund:arbitrum": "TREASURY_ADDRESS=$ARBITRUM_TREASURY USDC_ADDRESS=$ARBITRUM_USDC hardhat run scripts/fund-treasury.js --network arbitrumSepolia",
-
     "verify:reactive": "hardhat run scripts/verify-contracts.js --network reactive",
     "verify:sepolia": "hardhat run scripts/verify-contracts.js --network sepolia",
     "verify:arbitrum": "hardhat run scripts/verify-contracts.js --network arbitrumSepolia",
     "verify:all": "npm run verify:reactive && npm run verify:sepolia && npm run verify:arbitrum",
-
     "monitor": "node scripts/monitor.js",
     "demo": "hardhat run scripts/demo.js",
     "demo:local": "hardhat run scripts/demo.js --network hardhat",
-
     "gas-analysis": "hardhat run scripts/gas-analysis.js",
     "health-check": "node scripts/health-check.js",
     "submission": "node scripts/submission-generator.js",
-
     "hackathon:deploy": "npm run deploy:all && npm run configure && npm run configure:sepolia && npm run configure:arbitrum",
     "hackathon:verify": "npm run verify:all",
     "hackathon:test": "npm run test:all",
@@ -51,12 +49,16 @@
   ],
   "author": "Reactive Hackathon Participant",
   "license": "MIT",
-  "type": "commonjs",
   "devDependencies": {
-    "@nomicfoundation/hardhat-toolbox": "*",
-    "hardhat": "*",
-    "@openzeppelin/contracts": "*",
-    "dotenv": "*",
-    "chalk": "^4.1.2"
+    "@nomicfoundation/hardhat-toolbox": "^2.0.0",
+    "@nomicfoundation/hardhat-chai-matchers": "^1.0.0",
+    "@nomiclabs/hardhat-ethers": "^2.2.3",
+    "@openzeppelin/contracts": "^4.9.0",
+    "chai": "^4.3.7",
+    "chalk": "^4.1.2",
+    "dotenv": "^16.0.3",
+    "ethers": "^5.7.2",
+    "hardhat": "^2.19.5",
+    "hardhat-gas-reporter": "^1.0.9"
   }
 }

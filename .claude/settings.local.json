@@ -6,7 +6,15 @@
       "Bash(mkdir:*)",
       "Bash(npm run compile:*)",
       "Bash(npm run build:*)",
-      "Bash(npx react-scripts:*)"
+      "Bash(npx react-scripts:*)",
+      "Bash(npx hardhat:*)",
+      "Bash(node:*)",
+      "Bash(test:*)",
+      "Bash(npm run balances:*)",
+      "Bash(npm uninstall:*)",
+      "Bash(cat:*)",
+      "Bash(npm config:*)",
+      "Bash(cp:*)"
     ],
     "deny": [],
     "ask": []

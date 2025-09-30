@@ -1,1 +1,384 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';\nimport { ethers } from 'ethers';\nimport { useWeb3React } from '@web3-react/core';\nimport toast from 'react-hot-toast';\n\n// Contract ABIs (simplified for demo - in production, import from generated files)\nconst PRICE_MONITOR_ABI = [\n  'function getFeedCount() view returns (uint256)',\n  'function getTreasuryCount() view returns (uint256)',\n  'function addPriceFeed(bytes32 feedId, address feedAddress, uint256 chainId, uint256 threshold)',\n  'function addTreasury(uint256 chainId, address treasuryAddress, uint64 gasLimit)',\n  'event PriceThresholdBreached(bytes32 indexed feedId, int256 oldPrice, int256 newPrice, uint256 changePercent, uint256 timestamp)',\n  'event RebalanceTriggered(uint256 indexed chainId, address indexed treasury, bytes32 feedId, int256 price)'\n];\n\nconst TREASURY_VAULT_ABI = [\n  'function getPortfolioState() view returns (uint256 totalValue, uint256 lastRebalance, uint256 rebalanceCount)',\n  'function getAssetAllocation(bytes32 assetId) view returns (address token, uint256 balance, uint256 targetAllocation, uint256 currentAllocation)',\n  'function isPaused() view returns (bool)',\n  'function addAsset(bytes32 assetId, address token, uint256 targetAllocation, uint256 minBalance)',\n  'function executeRebalance(bytes32 feedId, int256 currentPrice, uint256 changePercent)',\n  'function pause()',\n  'function unpause()',\n  'function updateAssetAllocation(bytes32 assetId, uint256 newAllocation)',\n  'event RebalanceExecuted(bytes32 indexed feedId, address indexed tokenFrom, address indexed tokenTo, uint256 amount, int256 triggerPrice)',\n  'event EmergencyPaused(address indexed by, uint256 timestamp)'\n];\n\n// Contract addresses (will be set via environment variables)\nconst CONTRACT_ADDRESSES = {\n  PRICE_MONITOR: {\n    5318008: process.env.REACT_APP_REACTIVE_PRICE_MONITOR || '', // Reactive Network\n  },\n  TREASURY_VAULT: {\n    11155111: process.env.REACT_APP_SEPOLIA_TREASURY || '', // Sepolia\n    421614: process.env.REACT_APP_ARBITRUM_TREASURY || '', // Arbitrum Sepolia\n  }\n};\n\ninterface ContractsContextType {\n  priceMonitor: ethers.Contract | null;\n  treasuryVault: ethers.Contract | null;\n  isLoading: boolean;\n  error: string | null;\n  switchToReactiveNetwork: () => Promise<void>;\n  switchToChain: (chainId: number) => Promise<void>;\n  getContractAddress: (contract: string, chainId?: number) => string;\n}\n\nconst ContractsContext = createContext<ContractsContextType | undefined>(undefined);\n\ninterface ContractProviderProps {\n  children: ReactNode;\n}\n\nexport const ContractProvider: React.FC<ContractProviderProps> = ({ children }) => {\n  const { active, library, chainId, account } = useWeb3React();\n  const [priceMonitor, setPriceMonitor] = useState<ethers.Contract | null>(null);\n  const [treasuryVault, setTreasuryVault] = useState<ethers.Contract | null>(null);\n  const [isLoading, setIsLoading] = useState(false);\n  const [error, setError] = useState<string | null>(null);\n\n  useEffect(() => {\n    if (active && library && chainId) {\n      loadContracts();\n    } else {\n      setPriceMonitor(null);\n      setTreasuryVault(null);\n    }\n  }, [active, library, chainId, account]);\n\n  const loadContracts = async () => {\n    setIsLoading(true);\n    setError(null);\n\n    try {\n      const signer = library.getSigner();\n\n      // Load PriceMonitor on Reactive Network\n      const priceMonitorAddress = CONTRACT_ADDRESSES.PRICE_MONITOR[5318008];\n      if (priceMonitorAddress && chainId === 5318008) {\n        const priceMonitorContract = new ethers.Contract(\n          priceMonitorAddress,\n          PRICE_MONITOR_ABI,\n          signer\n        );\n        setPriceMonitor(priceMonitorContract);\n      }\n\n      // Load TreasuryVault on current chain\n      const treasuryAddress = CONTRACT_ADDRESSES.TREASURY_VAULT[chainId as keyof typeof CONTRACT_ADDRESSES.TREASURY_VAULT];\n      if (treasuryAddress) {\n        const treasuryContract = new ethers.Contract(\n          treasuryAddress,\n          TREASURY_VAULT_ABI,\n          signer\n        );\n        setTreasuryVault(treasuryContract);\n      }\n\n    } catch (err: any) {\n      console.error('Failed to load contracts:', err);\n      setError(err.message || 'Failed to load contracts');\n      toast.error('Failed to load contracts');\n    } finally {\n      setIsLoading(false);\n    }\n  };\n\n  const switchToReactiveNetwork = async () => {\n    try {\n      await library.provider.request({\n        method: 'wallet_switchEthereumChain',\n        params: [{ chainId: '0x512398' }], // 5318008 in hex\n      });\n    } catch (switchError: any) {\n      // This error code indicates that the chain has not been added to MetaMask\n      if (switchError.code === 4902) {\n        try {\n          await library.provider.request({\n            method: 'wallet_addEthereumChain',\n            params: [\n              {\n                chainId: '0x512398',\n                chainName: 'Reactive Network',\n                nativeCurrency: {\n                  name: 'REACT',\n                  symbol: 'REACT',\n                  decimals: 18,\n                },\n                rpcUrls: ['https://rpc.reactive.network'],\n                blockExplorerUrls: ['https://explorer.reactive.network'],\n              },\n            ],\n          });\n        } catch (addError) {\n          console.error('Failed to add Reactive Network:', addError);\n          toast.error('Failed to add Reactive Network to wallet');\n        }\n      } else {\n        console.error('Failed to switch to Reactive Network:', switchError);\n        toast.error('Failed to switch to Reactive Network');\n      }\n    }\n  };\n\n  const switchToChain = async (targetChainId: number) => {\n    try {\n      await library.provider.request({\n        method: 'wallet_switchEthereumChain',\n        params: [{ chainId: `0x${targetChainId.toString(16)}` }],\n      });\n    } catch (error: any) {\n      console.error(`Failed to switch to chain ${targetChainId}:`, error);\n      toast.error(`Failed to switch to chain ${targetChainId}`);\n    }\n  };\n\n  const getContractAddress = (contract: string, targetChainId?: number) => {\n    const currentChainId = targetChainId || chainId;\n    \n    switch (contract) {\n      case 'PRICE_MONITOR':\n        return CONTRACT_ADDRESSES.PRICE_MONITOR[5318008] || '';\n      case 'TREASURY_VAULT':\n        return CONTRACT_ADDRESSES.TREASURY_VAULT[currentChainId as keyof typeof CONTRACT_ADDRESSES.TREASURY_VAULT] || '';\n      default:\n        return '';\n    }\n  };\n\n  const contextValue: ContractsContextType = {\n    priceMonitor,\n    treasuryVault,\n    isLoading,\n    error,\n    switchToReactiveNetwork,\n    switchToChain,\n    getContractAddress,\n  };\n\n  return (\n    <ContractsContext.Provider value={contextValue}>\n      {children}\n    </ContractsContext.Provider>\n  );\n};\n\nexport const useContracts = (): ContractsContextType => {\n  const context = useContext(ContractsContext);\n  if (context === undefined) {\n    throw new Error('useContracts must be used within a ContractProvider');\n  }\n  return context;\n};\n\n// Hook for listening to contract events\nexport const useContractEvents = () => {\n  const { priceMonitor, treasuryVault } = useContracts();\n  const [events, setEvents] = useState<any[]>([]);\n\n  useEffect(() => {\n    if (!priceMonitor && !treasuryVault) return;\n\n    const eventListeners: any[] = [];\n\n    // Listen to PriceMonitor events\n    if (priceMonitor) {\n      const onPriceThresholdBreached = (feedId: string, oldPrice: any, newPrice: any, changePercent: any, timestamp: any, event: any) => {\n        const newEvent = {\n          type: 'PriceThresholdBreached',\n          data: { feedId, oldPrice, newPrice, changePercent, timestamp },\n          transactionHash: event.transactionHash,\n          blockNumber: event.blockNumber,\n          timestamp: new Date(),\n        };\n        setEvents(prev => [newEvent, ...prev.slice(0, 49)]); // Keep last 50 events\n        toast.success(`Price threshold breached: ${(changePercent / 100).toFixed(2)}%`);\n      };\n\n      const onRebalanceTriggered = (chainId: any, treasury: string, feedId: string, price: any, event: any) => {\n        const newEvent = {\n          type: 'RebalanceTriggered',\n          data: { chainId, treasury, feedId, price },\n          transactionHash: event.transactionHash,\n          blockNumber: event.blockNumber,\n          timestamp: new Date(),\n        };\n        setEvents(prev => [newEvent, ...prev.slice(0, 49)]);\n        toast.success('Rebalancing triggered!');\n      };\n\n      priceMonitor.on('PriceThresholdBreached', onPriceThresholdBreached);\n      priceMonitor.on('RebalanceTriggered', onRebalanceTriggered);\n\n      eventListeners.push(\n        () => priceMonitor.off('PriceThresholdBreached', onPriceThresholdBreached),\n        () => priceMonitor.off('RebalanceTriggered', onRebalanceTriggered)\n      );\n    }\n\n    // Listen to TreasuryVault events\n    if (treasuryVault) {\n      const onRebalanceExecuted = (feedId: string, tokenFrom: string, tokenTo: string, amount: any, triggerPrice: any, event: any) => {\n        const newEvent = {\n          type: 'RebalanceExecuted',\n          data: { feedId, tokenFrom, tokenTo, amount, triggerPrice },\n          transactionHash: event.transactionHash,\n          blockNumber: event.blockNumber,\n          timestamp: new Date(),\n        };\n        setEvents(prev => [newEvent, ...prev.slice(0, 49)]);\n        toast.success('Rebalancing executed successfully!');\n      };\n\n      const onEmergencyPaused = (by: string, timestamp: any, event: any) => {\n        const newEvent = {\n          type: 'EmergencyPaused',\n          data: { by, timestamp },\n          transactionHash: event.transactionHash,\n          blockNumber: event.blockNumber,\n          timestamp: new Date(),\n        };\n        setEvents(prev => [newEvent, ...prev.slice(0, 49)]);\n        toast.error('System paused by emergency action!');\n      };\n\n      treasuryVault.on('RebalanceExecuted', onRebalanceExecuted);\n      treasuryVault.on('EmergencyPaused', onEmergencyPaused);\n\n      eventListeners.push(\n        () => treasuryVault.off('RebalanceExecuted', onRebalanceExecuted),\n        () => treasuryVault.off('EmergencyPaused', onEmergencyPaused)\n      );\n    }\n\n    // Cleanup function\n    return () => {\n      eventListeners.forEach(cleanup => cleanup());\n    };\n  }, [priceMonitor, treasuryVault]);\n\n  return { events };\n};
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { ethers } from 'ethers';
+import { useWeb3React } from '@web3-react/core';
+import toast from 'react-hot-toast';
+import PriceMonitorABI from '../contracts/abis/PriceMonitorReactive.json';
+import TreasuryVaultABI from '../contracts/abis/TreasuryVault.json';
+
+// Contract addresses (will be set via environment variables or config file)
+const CONTRACT_ADDRESSES = {
+  PRICE_MONITOR: {
+    31337: process.env.REACT_APP_REACTIVE_PRICE_MONITOR || '', // Local Hardhat
+    1597: process.env.REACT_APP_REACTIVE_PRICE_MONITOR || '', // Reactive Mainnet
+  },
+  TREASURY_VAULT: {
+    31337: process.env.REACT_APP_SEPOLIA_TREASURY || '', // Local Hardhat
+    11155111: process.env.REACT_APP_SEPOLIA_TREASURY || '', // Sepolia
+    421614: process.env.REACT_APP_ARBITRUM_TREASURY || '', // Arbitrum Sepolia
+  }
+};
+
+interface ContractsContextType {
+  priceMonitor: ethers.Contract | null;
+  treasuryVault: ethers.Contract | null;
+  isLoading: boolean;
+  error: string | null;
+  switchToReactiveNetwork: () => Promise<void>;
+  switchToChain: (chainId: number) => Promise<void>;
+  getContractAddress: (contract: string, chainId?: number) => string;
+  refreshContracts: () => Promise<void>;
+}
+
+const ContractsContext = createContext<ContractsContextType | undefined>(undefined);
+
+interface ContractProviderProps {
+  children: ReactNode;
+}
+
+export const ContractProvider: React.FC<ContractProviderProps> = ({ children }) => {
+  const { active, library, chainId, account } = useWeb3React();
+  const [priceMonitor, setPriceMonitor] = useState<ethers.Contract | null>(null);
+  const [treasuryVault, setTreasuryVault] = useState<ethers.Contract | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (active && library && chainId && account) {
+      loadContracts();
+    } else {
+      setPriceMonitor(null);
+      setTreasuryVault(null);
+    }
+  }, [active, library, chainId, account]);
+
+  const loadContracts = async () => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const signer = library.getSigner();
+
+      // Load PriceMonitor on Reactive Mainnet or Local
+      const priceMonitorAddress = CONTRACT_ADDRESSES.PRICE_MONITOR[chainId as keyof typeof CONTRACT_ADDRESSES.PRICE_MONITOR];
+      if (priceMonitorAddress) {
+        const priceMonitorContract = new ethers.Contract(
+          priceMonitorAddress,
+          PriceMonitorABI,
+          signer
+        );
+        setPriceMonitor(priceMonitorContract);
+        console.log('PriceMonitor loaded:', priceMonitorAddress);
+      }
+
+      // Load TreasuryVault on current chain
+      const treasuryAddress = CONTRACT_ADDRESSES.TREASURY_VAULT[chainId as keyof typeof CONTRACT_ADDRESSES.TREASURY_VAULT];
+      if (treasuryAddress) {
+        const treasuryContract = new ethers.Contract(
+          treasuryAddress,
+          TreasuryVaultABI,
+          signer
+        );
+        setTreasuryVault(treasuryContract);
+        console.log('TreasuryVault loaded:', treasuryAddress);
+      }
+
+    } catch (err: any) {
+      console.error('Failed to load contracts:', err);
+      setError(err.message || 'Failed to load contracts');
+      toast.error('Failed to load contracts');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const refreshContracts = async () => {
+    await loadContracts();
+  };
+
+  const switchToReactiveNetwork = async () => {
+    if (!library?.provider) {
+      toast.error('No wallet provider found');
+      return;
+    }
+
+    try {
+      await library.provider.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: '0x63D' }], // 1597 in hex
+      });
+      toast.success('Switched to Reactive Mainnet');
+    } catch (switchError: any) {
+      // This error code indicates that the chain has not been added to MetaMask
+      if (switchError.code === 4902) {
+        try {
+          await library.provider.request({
+            method: 'wallet_addEthereumChain',
+            params: [
+              {
+                chainId: '0x63D',
+                chainName: 'Reactive Mainnet',
+                nativeCurrency: {
+                  name: 'REACT',
+                  symbol: 'REACT',
+                  decimals: 18,
+                },
+                rpcUrls: ['https://mainnet-rpc.rnk.dev/'],
+                blockExplorerUrls: ['https://reactscan.net/'],
+              },
+            ],
+          });
+          toast.success('Reactive Network added successfully');
+        } catch (addError) {
+          console.error('Failed to add Reactive Network:', addError);
+          toast.error('Failed to add Reactive Network to wallet');
+        }
+      } else {
+        console.error('Failed to switch to Reactive Network:', switchError);
+        toast.error('Failed to switch to Reactive Network');
+      }
+    }
+  };
+
+  const switchToChain = async (targetChainId: number) => {
+    if (!library?.provider) {
+      toast.error('No wallet provider found');
+      return;
+    }
+
+    try {
+      await library.provider.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: `0x${targetChainId.toString(16)}` }],
+      });
+      toast.success(`Switched to chain ${targetChainId}`);
+    } catch (error: any) {
+      console.error(`Failed to switch to chain ${targetChainId}:`, error);
+      toast.error(`Failed to switch to chain ${targetChainId}`);
+    }
+  };
+
+  const getContractAddress = (contract: string, targetChainId?: number) => {
+    const currentChainId = targetChainId || chainId;
+
+    switch (contract) {
+      case 'PRICE_MONITOR':
+        return CONTRACT_ADDRESSES.PRICE_MONITOR[1597] || '';
+      case 'TREASURY_VAULT':
+        return CONTRACT_ADDRESSES.TREASURY_VAULT[currentChainId as keyof typeof CONTRACT_ADDRESSES.TREASURY_VAULT] || '';
+      default:
+        return '';
+    }
+  };
+
+  const contextValue: ContractsContextType = {
+    priceMonitor,
+    treasuryVault,
+    isLoading,
+    error,
+    switchToReactiveNetwork,
+    switchToChain,
+    getContractAddress,
+    refreshContracts,
+  };
+
+  return (
+    <ContractsContext.Provider value={contextValue}>
+      {children}
+    </ContractsContext.Provider>
+  );
+};
+
+export const useContracts = (): ContractsContextType => {
+  const context = useContext(ContractsContext);
+  if (context === undefined) {
+    throw new Error('useContracts must be used within a ContractProvider');
+  }
+  return context;
+};
+
+// Hook for listening to contract events
+export const useContractEvents = () => {
+  const { priceMonitor, treasuryVault } = useContracts();
+  const [events, setEvents] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!priceMonitor && !treasuryVault) return;
+
+    const eventListeners: any[] = [];
+
+    // Listen to PriceMonitor events
+    if (priceMonitor) {
+      const onPriceThresholdBreached = (
+        feedId: string,
+        oldPrice: any,
+        newPrice: any,
+        changePercent: any,
+        timestamp: any,
+        event: any
+      ) => {
+        const newEvent = {
+          type: 'PriceThresholdBreached',
+          data: { feedId, oldPrice, newPrice, changePercent, timestamp },
+          transactionHash: event.transactionHash,
+          blockNumber: event.blockNumber,
+          timestamp: new Date(),
+        };
+        setEvents(prev => [newEvent, ...prev.slice(0, 49)]); // Keep last 50 events
+        toast.success(`Price threshold breached: ${(Number(changePercent) / 100).toFixed(2)}%`);
+      };
+
+      const onRebalanceTriggered = (
+        chainId: any,
+        treasury: string,
+        feedId: string,
+        price: any,
+        event: any
+      ) => {
+        const newEvent = {
+          type: 'RebalanceTriggered',
+          data: { chainId, treasury, feedId, price },
+          transactionHash: event.transactionHash,
+          blockNumber: event.blockNumber,
+          timestamp: new Date(),
+        };
+        setEvents(prev => [newEvent, ...prev.slice(0, 49)]);
+        toast.success('Rebalancing triggered!');
+      };
+
+      priceMonitor.on('PriceThresholdBreached', onPriceThresholdBreached);
+      priceMonitor.on('RebalanceTriggered', onRebalanceTriggered);
+
+      eventListeners.push(
+        () => priceMonitor.off('PriceThresholdBreached', onPriceThresholdBreached),
+        () => priceMonitor.off('RebalanceTriggered', onRebalanceTriggered)
+      );
+    }
+
+    // Listen to TreasuryVault events
+    if (treasuryVault) {
+      const onRebalanceExecuted = (
+        feedId: string,
+        tokenFrom: string,
+        tokenTo: string,
+        amount: any,
+        triggerPrice: any,
+        event: any
+      ) => {
+        const newEvent = {
+          type: 'RebalanceExecuted',
+          data: { feedId, tokenFrom, tokenTo, amount, triggerPrice },
+          transactionHash: event.transactionHash,
+          blockNumber: event.blockNumber,
+          timestamp: new Date(),
+        };
+        setEvents(prev => [newEvent, ...prev.slice(0, 49)]);
+        toast.success('Rebalancing executed successfully!');
+      };
+
+      const onEmergencyPaused = (by: string, timestamp: any, event: any) => {
+        const newEvent = {
+          type: 'EmergencyPaused',
+          data: { by, timestamp },
+          transactionHash: event.transactionHash,
+          blockNumber: event.blockNumber,
+          timestamp: new Date(),
+        };
+        setEvents(prev => [newEvent, ...prev.slice(0, 49)]);
+        toast.error('System paused by emergency action!');
+      };
+
+      const onAssetAdded = (assetId: string, token: string, targetAllocation: any, event: any) => {
+        const newEvent = {
+          type: 'AssetAdded',
+          data: { assetId, token, targetAllocation },
+          transactionHash: event.transactionHash,
+          blockNumber: event.blockNumber,
+          timestamp: new Date(),
+        };
+        setEvents(prev => [newEvent, ...prev.slice(0, 49)]);
+        toast.success('New asset added to portfolio!');
+      };
+
+      treasuryVault.on('RebalanceExecuted', onRebalanceExecuted);
+      treasuryVault.on('EmergencyPaused', onEmergencyPaused);
+      treasuryVault.on('AssetAdded', onAssetAdded);
+
+      eventListeners.push(
+        () => treasuryVault.off('RebalanceExecuted', onRebalanceExecuted),
+        () => treasuryVault.off('EmergencyPaused', onEmergencyPaused),
+        () => treasuryVault.off('AssetAdded', onAssetAdded)
+      );
+    }
+
+    // Cleanup function
+    return () => {
+      eventListeners.forEach(cleanup => cleanup());
+    };
+  }, [priceMonitor, treasuryVault]);
+
+  return { events };
+};
+
+// Hook for contract data fetching
+export const useContractData = () => {
+  const { priceMonitor, treasuryVault } = useContracts();
+  const [portfolioData, setPortfolioData] = useState<any>(null);
+  const [monitoringData, setMonitoringData] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+
+  const fetchPortfolioData = async () => {
+    if (!treasuryVault) return;
+
+    setLoading(true);
+    try {
+      const portfolioState = await treasuryVault.getPortfolioState();
+      setPortfolioData({
+        totalValue: portfolioState[0],
+        lastRebalance: portfolioState[1],
+        rebalanceCount: portfolioState[2],
+      });
+    } catch (err) {
+      console.error('Failed to fetch portfolio data:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchMonitoringData = async () => {
+    if (!priceMonitor) return;
+
+    setLoading(true);
+    try {
+      const feedCount = await priceMonitor.getFeedCount();
+      const treasuryCount = await priceMonitor.getTreasuryCount();
+
+      setMonitoringData({
+        feedCount: Number(feedCount),
+        treasuryCount: Number(treasuryCount),
+      });
+    } catch (err) {
+      console.error('Failed to fetch monitoring data:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (treasuryVault) {
+      fetchPortfolioData();
+    }
+    if (priceMonitor) {
+      fetchMonitoringData();
+    }
+  }, [treasuryVault, priceMonitor]);
+
+  return {
+    portfolioData,
+    monitoringData,
+    loading,
+    refetch: () => {
+      fetchPortfolioData();
+      fetchMonitoringData();
+    }
+  };
+};

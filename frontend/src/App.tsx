@@ -15,13 +15,14 @@ import ErrorBoundary from './components/ErrorBoundary';
 
 // Connector configurations
 export const injectedConnector = new InjectedConnector({
-  supportedChainIds: [1, 3, 4, 5, 42, 1337, 5318008, 11155111, 421614], // Include Reactive Network
+  supportedChainIds: [1, 3, 4, 5, 42, 1337, 31337, 1597, 11155111, 421614], // Include local Hardhat network
 });
 
 export const walletConnectConnector = new WalletConnectConnector({
   rpc: {
     1: process.env.REACT_APP_MAINNET_RPC || '',
-    5318008: process.env.REACT_APP_REACTIVE_RPC || 'https://rpc.reactive.network',
+    31337: process.env.REACT_APP_LOCAL_RPC || 'http://localhost:8545',
+    1597: process.env.REACT_APP_REACTIVE_RPC || 'https://mainnet-rpc.rnk.dev/',
     11155111: process.env.REACT_APP_SEPOLIA_RPC || '',
     421614: process.env.REACT_APP_ARBITRUM_SEPOLIA_RPC || '',
   },

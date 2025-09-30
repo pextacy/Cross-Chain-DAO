@@ -247,7 +247,7 @@ contract TreasuryVault is ReentrancyGuard, AccessControl {
     }
 
     function getStablecoin() internal pure returns (address) {
-        return 0xA0b86a33E6417fAcff1a42c5FD8F0B1B34f7bdB; // USDC on mainnet
+        return 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48; // USDC on mainnet
     }
 
     // Emergency functions

@@ -3,19 +3,19 @@ pragma solidity ^0.8.19;
 
 import "./interfaces/IReactive.sol";
 
+// Chainlink Price Feed interface
+interface IAggregatorV3 {
+    function latestRoundData() external view returns (
+        uint80 roundId,
+        int256 price,
+        uint256 startedAt,
+        uint256 updatedAt,
+        uint80 answeredInRound
+    );
+}
+
 contract PriceMonitorReactive {
     IReactive constant REACTIVE = IReactive(0x0000000000000000000000000000000000fffFfF);
-
-    // Chainlink Price Feed interface
-    interface IAggregatorV3 {
-        function latestRoundData() external view returns (
-            uint80 roundId,
-            int256 price,
-            uint256 startedAt,
-            uint256 updatedAt,
-            uint80 answeredInRound
-        );
-    }
 
     struct PriceFeed {
         address feedAddress;
@@ -83,14 +83,15 @@ contract PriceMonitorReactive {
 
         // Subscribe to Chainlink price feed updates
         // Listen for AnswerUpdated events from the price feed
-        REACTIVE.subscribe(
-            chainId,
-            feedAddress,
-            0x0559884fd3a460db3073b7fc896cc77986f16e378210ded43186175bf646fc5f, // AnswerUpdated topic
-            0,
-            0,
-            0
-        );
+        // Note: Commented out for local testing - REACTIVE system contract not available
+        // REACTIVE.subscribe(
+        //     chainId,
+        //     feedAddress,
+        //     0x0559884fd3a460db3073b7fc896cc77986f16e378210ded43186175bf646fc5f, // AnswerUpdated topic
+        //     0,
+        //     0,
+        //     0
+        // );
     }
 
     function addTreasury(

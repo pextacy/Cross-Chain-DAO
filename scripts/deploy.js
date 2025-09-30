@@ -12,8 +12,8 @@ async function main() {
   // Network-specific configurations
   const networkConfigs = {
     reactive: {
-      chainId: 5318008,
-      name: "Reactive",
+      chainId: 1597,
+      name: "Reactive Mainnet",
       deployReactive: true,
       deployTreasury: false
     },
